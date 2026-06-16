@@ -228,6 +228,52 @@
     color: var(--muted);
     text-align: left;
   }
+
+  /* ── 手机：表格变卡片 ── */
+  @media (max-width: 600px) {
+    .table-card { background: transparent; border: none; box-shadow: none; }
+    table, thead, tbody, tr, th, td { display: block; }
+    thead { display: none; }
+    tbody tr {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 10px;
+      padding: 12px 14px;
+    }
+    tbody tr:hover { background: var(--surface); }
+    tbody td {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border: none;
+      font-size: 13px;
+      text-align: right;
+    }
+    tbody td:first-child {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+      justify-content: flex-start;
+    }
+    tbody td::before {
+      content: attr(data-label);
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      text-align: left;
+      flex-shrink: 0;
+    }
+    tbody td:first-child::before { display: none; }
+  }
   .up   { color: var(--red);   }
   .down { color: var(--green); }
   .flat { color: var(--muted); }
@@ -430,12 +476,12 @@ async function load() {
       const p = reversed[i + 1] || null;
       return `<tr>
         <td>${new Date(r.date).toLocaleDateString('zh-AU',{year:'numeric',month:'short',day:'numeric'})}</td>
-        <td class="${cls(r.vivaMelbUlp, p?.vivaMelbUlp)}">${fmt(r.vivaMelbUlp)}</td>
-        <td class="${cls(r.aipUlp,      p?.aipUlp)}">${fmt(r.aipUlp)}</td>
-        <td class="${cls(r.vivaDiesel,  p?.vivaDiesel)}">${fmt(r.vivaDiesel)}</td>
-        <td class="${cls(r.aipDiesel,   p?.aipDiesel)}">${fmt(r.aipDiesel)}</td>
-        <td class="${cls(r.vivaMelbPulp,p?.vivaMelbPulp)}">${fmt(r.vivaMelbPulp)}</td>
-        <td class="${cls(r.vivaMelbU98, p?.vivaMelbU98)}">${fmt(r.vivaMelbU98)}</td>
+        <td data-label="Viva ULP" class="${cls(r.vivaMelbUlp, p?.vivaMelbUlp)}">${fmt(r.vivaMelbUlp)}</td>
+        <td data-label="AIP ULP"  class="${cls(r.aipUlp,      p?.aipUlp)}">${fmt(r.aipUlp)}</td>
+        <td data-label="Viva Diesel" class="${cls(r.vivaDiesel,  p?.vivaDiesel)}">${fmt(r.vivaDiesel)}</td>
+        <td data-label="AIP Diesel"  class="${cls(r.aipDiesel,   p?.aipDiesel)}">${fmt(r.aipDiesel)}</td>
+        <td data-label="Viva PULP"   class="${cls(r.vivaMelbPulp,p?.vivaMelbPulp)}">${fmt(r.vivaMelbPulp)}</td>
+        <td data-label="Viva U98"    class="${cls(r.vivaMelbU98, p?.vivaMelbU98)}">${fmt(r.vivaMelbU98)}</td>
       </tr>`;
     }).join('');
 
