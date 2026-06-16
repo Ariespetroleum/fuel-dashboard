@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aries Petroleum | 油价追踪</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:           #F4F6F8;
+    --surface:      #FFFFFF;
+    --surface-soft: #F8FAFC;
+    --border:       #DDE3EA;
+    --border-strong:#C9D2DD;
+    --text:         #142033;
+    --label:        #344054;
+    --muted:        #667085;
+    --sans:         'DM Sans', sans-serif;
+    --mono:         'DM Mono', monospace;
+    --radius:       16px;
+    --radius-sm:    10px;
+    --shadow:       0 4px 18px rgba(15,23,42,.08);
+    --shadow-sm:    0 2px 8px rgba(15,23,42,.06);
+
+    /* brand colours from the nav gradient */
+    --red:          #E60012;
+    --red-dark:     #B8000E;
+    --blue:         #003DA5;
+    --green:        #00A651;
+    --green-light:  #ECFDF3;
+    --danger-light: #FFF1F2;
+
+    /* chart colours */
+    --viva:         #E60012;
+    --aip:          #003DA5;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── NAV ── */
+  nav {
+    background: linear-gradient(135deg, #E60012 0%, #6B21A8 60%, #003DA5 100%);
+    padding: 0 32px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-brand {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  .nav-tag {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255,255,255,.7);
+    letter-spacing: .06em;
+  }
+
+  /* ── PAGE ── */
+  main { padding: 28px 32px; max-width: 1180px; margin: 0 auto; }
+
+  .page-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .page-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+  #last-updated {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    margin-bottom: 12px;
+    margin-top: 28px;
+  }
+
+  /* ── CARDS ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+  }
+  .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 10px;
+  }
+  .card-value {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--green);
+    line-height: 1;
+  }
+  .card-unit {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .badge {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .badge-viva { background: var(--danger-light); color: var(--red); }
+  .badge-aip  { background: #EFF6FF;             color: var(--blue); }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── CHARTS ── */
+  .charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 680px) { .charts { grid-template-columns: 1fr; } }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+  }
+  .chart-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--label);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+  }
+
+  /* ── TABLE ── */
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    text-align: right;
+  }
+  thead th:first-child { text-align: left; }
+  tbody tr { border-top: 1px solid var(--border); }
+  tbody tr:hover { background: var(--surface-soft); }
+  tbody td {
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    text-align: right;
+    color: var(--text);
+  }
+  tbody td:first-child {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: left;
+  }
+  .up   { color: var(--red);   }
+  .down { color: var(--green); }
+  .flat { color: var(--muted); }
+
+  /* ── LOADING ── */
+  #loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 260px;
+    color: var(--muted);
+    font-size: 13px;
+    gap: 10px;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--red);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">Aries Petroleum</div>
+  <div class="nav-tag">油价追踪 · TGP Dashboard</div>
+</nav>
+
+<main>
+  <div class="page-title">油价追踪</div>
+  <div class="page-sub">
+    Viva Energy 进货价 · AIP 行业均价（BP + Viva + Ampol + ExxonMobil）·
+    <span id="last-updated">加载中...</span>
+  </div>
+
+  <div id="loading"><div class="spinner"></div> 正在读取数据...</div>
+
+  <div id="content" style="display:none">
+
+    <!-- 今日价格 -->
+    <div class="section-label">今日价格 — Melbourne</div>
+    <div class="cards" id="cards"></div>
+
+    <!-- 图例 -->
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--viva)"></div>
+        Viva Energy（直接进货价）
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--aip)"></div>
+        AIP 行业均价
+      </div>
+    </div>
+
+    <!-- 走势图 -->
+    <div class="section-label">价格走势</div>
+    <div class="charts">
+      <div class="chart-card">
+        <div class="chart-title">ULP 91</div>
+        <canvas id="chartUlp"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Diesel 柴油</div>
+        <canvas id="chartDiesel"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">PULP 95（Viva）</div>
+        <canvas id="chartPulp"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">U98（Viva）</div>
+        <canvas id="chartU98"></canvas>
+      </div>
+    </div>
+
+    <!-- 历史数据 -->
+    <div class="section-label">历史数据</div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>Viva ULP</th>
+            <th>AIP ULP</th>
+            <th>Viva Diesel</th>
+            <th>AIP Diesel</th>
+            <th>Viva PULP</th>
+            <th>Viva U98</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbzNUNynPzqztpf5s9Zau0LwfD-a0ohaqD7ahfcY0lUblyjYFFdVUShunc-6APZKQRCk/exec';
+
+Chart.defaults.color       = '#667085';
+Chart.defaults.borderColor = '#DDE3EA';
+Chart.defaults.font.family = "'DM Mono', monospace";
+Chart.defaults.font.size   = 11;
+
+function fmt(v)    { return v != null && v !== '' ? Number(v).toFixed(2) : '—'; }
+function fmtDate(d){ return new Date(d).toLocaleDateString('zh-AU', { month: 'short', day: 'numeric' }); }
+function cls(c, p) {
+  if (c == null || p == null) return 'flat';
+  return c > p ? 'up' : c < p ? 'down' : 'flat';
+}
+
+function makeChart(id, datasets) {
+  new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels: window._labels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 14 } },
+        tooltip: {
+          callbacks: {
+            label: c => ' ' + c.dataset.label + ': ' + (c.parsed.y != null ? c.parsed.y.toFixed(2) + ' cpl' : '—')
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#DDE3EA' }, ticks: { maxRotation: 45 } },
+        y: { grid: { color: '#DDE3EA' }, ticks: { callback: v => v.toFixed(0) } }
+      }
+    }
+  });
+}
+
+function ds(label, color, data) {
+  return {
+    label, data,
+    borderColor: color,
+    backgroundColor: color + '18',
+    borderWidth: 2,
+    pointRadius: data.length <= 10 ? 4 : 2,
+    pointHoverRadius: 6,
+    tension: 0.35,
+    fill: true,
+  };
+}
+
+async function load() {
+  try {
+    const res  = await fetch(API_URL);
+    const json = await res.json();
+    if (!json.ok || !json.rows.length) throw new Error('暂无数据');
+
+    const rows = json.rows
+      .filter(r => r.date)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const latest = rows[rows.length - 1];
+    const prev   = rows.length > 1 ? rows[rows.length - 2] : null;
+
+    // Last updated
+    document.getElementById('last-updated').textContent =
+      '数据日期：' + new Date(latest.date).toLocaleDateString('zh-AU', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Cards
+    const cardDefs = [
+      { label: 'ULP 91',  value: latest.vivaMelbUlp,  src: 'viva', note: 'Viva 进货价' },
+      { label: 'ULP 91',  value: latest.aipUlp,        src: 'aip',  note: 'AIP 行业均价' },
+      { label: 'Diesel',  value: latest.vivaDiesel,    src: 'viva', note: 'Viva 进货价' },
+      { label: 'Diesel',  value: latest.aipDiesel,     src: 'aip',  note: 'AIP 行业均价' },
+      { label: 'PULP 95', value: latest.vivaMelbPulp,  src: 'viva', note: 'Viva 进货价' },
+      { label: 'U98',     value: latest.vivaMelbU98,   src: 'viva', note: 'Viva 进货价' },
+    ];
+    document.getElementById('cards').innerHTML = cardDefs.map(c => `
+      <div class="card">
+        <div class="card-label">${c.label}</div>
+        <div class="card-value">${fmt(c.value)}</div>
+        <div class="card-unit">澳分/升（含 GST）</div>
+        <span class="badge badge-${c.src}">${c.note}</span>
+      </div>
+    `).join('');
+
+    // Charts
+    window._labels = rows.map(r => fmtDate(r.date));
+    makeChart('chartUlp',    [ds('Viva ULP 91', '#E60012', rows.map(r => r.vivaMelbUlp||null)),
+                               ds('AIP 均价',    '#003DA5', rows.map(r => r.aipUlp||null))]);
+    makeChart('chartDiesel', [ds('Viva Diesel', '#E60012', rows.map(r => r.vivaDiesel||null)),
+                               ds('AIP 均价',    '#003DA5', rows.map(r => r.aipDiesel||null))]);
+    makeChart('chartPulp',   [ds('Viva PULP 95','#00A651', rows.map(r => r.vivaMelbPulp||null))]);
+    makeChart('chartU98',    [ds('Viva U98',    '#6B21A8', rows.map(r => r.vivaMelbU98||null))]);
+
+    // Table
+    const reversed = [...rows].reverse();
+    document.getElementById('table-body').innerHTML = reversed.map((r, i) => {
+      const p = reversed[i + 1] || null;
+      return `<tr>
+        <td>${new Date(r.date).toLocaleDateString('zh-AU',{year:'numeric',month:'short',day:'numeric'})}</td>
+        <td class="${cls(r.vivaMelbUlp, p?.vivaMelbUlp)}">${fmt(r.vivaMelbUlp)}</td>
+        <td class="${cls(r.aipUlp,      p?.aipUlp)}">${fmt(r.aipUlp)}</td>
+        <td class="${cls(r.vivaDiesel,  p?.vivaDiesel)}">${fmt(r.vivaDiesel)}</td>
+        <td class="${cls(r.aipDiesel,   p?.aipDiesel)}">${fmt(r.aipDiesel)}</td>
+        <td class="${cls(r.vivaMelbPulp,p?.vivaMelbPulp)}">${fmt(r.vivaMelbPulp)}</td>
+        <td class="${cls(r.vivaMelbU98, p?.vivaMelbU98)}">${fmt(r.vivaMelbU98)}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      '❌ 无法加载数据：' + e.message;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
