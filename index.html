@@ -296,6 +296,127 @@
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── STORE PICKER ── */
+  .store-picker {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .store-picker::-webkit-scrollbar { display: none; }
+  .store-chip {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--label);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s ease;
+  }
+  .store-chip:hover { border-color: var(--border-strong); }
+  .store-chip.active {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+
+  /* ── COMPETITOR LIST ── */
+  .competitor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .competitor-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .competitor-row.is-mine {
+    border-color: var(--red);
+    background: var(--danger-light);
+  }
+  .competitor-rank {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--surface-soft);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .competitor-row.is-mine .competitor-rank {
+    background: var(--red);
+    color: #fff;
+  }
+  .competitor-info { flex: 1; min-width: 0; }
+  .competitor-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .competitor-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .competitor-prices {
+    display: flex;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .price-cell { text-align: center; min-width: 38px; }
+  .price-cell-label {
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 2px;
+  }
+  .price-cell-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .price-cell-value.empty { color: var(--border-strong); }
+
+  /* 手机：价格横排变两列网格 */
+  @media (max-width: 600px) {
+    .competitor-row { flex-wrap: wrap; }
+    .competitor-prices {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .price-cell { min-width: 50px; text-align: left; }
+  }
 </style>
 </head>
 <body>
@@ -353,8 +474,13 @@
       </div>
     </div>
 
+    <!-- 周边竞品零售价 -->
+    <div class="section-label">周边竞品零售价 — Servo Saver 官方数据</div>
+    <div class="store-picker" id="store-picker"></div>
+    <div class="competitor-list" id="competitor-list"></div>
+
     <!-- 历史数据 -->
-    <div class="section-label">历史数据</div>
+    <div class="section-label" style="margin-top:32px">历史数据</div>
     <div class="table-card">
       <table>
         <thead>
@@ -488,10 +614,71 @@ async function load() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
 
+    // ── Servo Saver 周边竞品 ──
+    if (json.servo && json.servo.length) {
+      window._servoData = json.servo;
+      renderStorePicker(json.servo);
+    } else {
+      document.getElementById('store-picker').innerHTML = '';
+      document.getElementById('competitor-list').innerHTML =
+        '<div style="color:var(--muted);font-size:13px;padding:8px 0;">暂无周边竞品数据</div>';
+    }
+
   } catch(e) {
     document.getElementById('loading').innerHTML =
       '❌ 无法加载数据：' + e.message;
   }
+}
+
+// ── Servo Saver 周边竞品渲染 ──
+const FUEL_LABELS = { u91: 'U91', p95: '95', p98: '98', dsl: '柴油', e10: 'E10' };
+
+function renderStorePicker(servoRows) {
+  const stores = [...new Set(servoRows.map(r => r.myStore))];
+  const picker = document.getElementById('store-picker');
+
+  picker.innerHTML = stores.map((s, i) =>
+    `<button class="store-chip${i===0?' active':''}" data-store="${s}">${s}</button>`
+  ).join('');
+
+  picker.querySelectorAll('.store-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      picker.querySelectorAll('.store-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      renderCompetitorList(chip.dataset.store);
+    });
+  });
+
+  renderCompetitorList(stores[0]);
+}
+
+function renderCompetitorList(storeName) {
+  const rows = window._servoData.filter(r => r.myStore === storeName);
+  const list = document.getElementById('competitor-list');
+
+  if (!rows.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">暂无数据</div>';
+    return;
+  }
+
+  list.innerHTML = rows.map((r, i) => {
+    const priceCells = ['u91','p95','p98','dsl','e10'].map(key => {
+      const val = r[key];
+      return `<div class="price-cell">
+        <div class="price-cell-label">${FUEL_LABELS[key]}</div>
+        <div class="price-cell-value ${val ? '' : 'empty'}">${val ? Number(val).toFixed(1) : '—'}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="competitor-row">
+      <div class="competitor-rank">${i + 1}</div>
+      <div class="competitor-info">
+        <div class="competitor-name">${r.stationName}</div>
+        <div class="competitor-meta">${r.distanceKm} km · ${r.address}</div>
+      </div>
+      <div class="competitor-prices">${priceCells}</div>
+    </div>`;
+  }).join('');
 }
 
 load();
