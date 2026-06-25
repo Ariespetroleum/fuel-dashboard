@@ -443,6 +443,12 @@
     color: var(--text);
   }
   .price-cell-value.empty { color: var(--border-strong); }
+  .price-cell-value.cheaper {
+    color: var(--red);
+    background: var(--danger-light);
+    padding: 1px 6px;
+    border-radius: 6px;
+  }
 
   /* 手机：价格横排变两列网格 */
   @media (max-width: 600px) {
@@ -767,11 +773,16 @@ function renderCompetitorList(storeName) {
   const myRow   = allRows.find(r => r.stationName && r.stationName.indexOf('⭐') === 0);
   const compRows = allRows.filter(r => r !== myRow);
 
-  const buildPriceCells = (r) => ['u91','p95','p98','dsl','e10'].map(key => {
+  // buildPriceCells(r, baseline) — baseline 传本店价格对象时，比本店低的数值标红
+  const buildPriceCells = (r, baseline) => ['u91','p95','p98','dsl','e10'].map(key => {
     const val = r[key];
+    let cheaperClass = '';
+    if (baseline && val && baseline[key]) {
+      if (Number(val) < Number(baseline[key])) cheaperClass = ' cheaper';
+    }
     return `<div class="price-cell">
       <div class="price-cell-label">${FUEL_LABELS[key]}</div>
-      <div class="price-cell-value ${val ? '' : 'empty'}">${val ? Number(val).toFixed(1) : '—'}</div>
+      <div class="price-cell-value ${val ? '' : 'empty'}${cheaperClass}">${val ? Number(val).toFixed(1) : '—'}</div>
     </div>`;
   }).join('');
 
@@ -784,7 +795,7 @@ function renderCompetitorList(storeName) {
         <div class="competitor-name">${myRow.stationName.replace('⭐ ', '')}</div>
         <div class="competitor-meta">我的门店 · ${myRow.address}</div>
       </div>
-      <div class="competitor-prices">${buildPriceCells(myRow)}</div>
+      <div class="competitor-prices">${buildPriceCells(myRow, null)}</div>
     </div>`;
   } else {
     html += `<div class="competitor-row" style="color:var(--muted);font-size:12px;">
@@ -798,7 +809,7 @@ function renderCompetitorList(storeName) {
         <div class="competitor-name">${r.stationName}</div>
         <div class="competitor-meta">${r.distanceKm} km · ${r.address}</div>
       </div>
-      <div class="competitor-prices">${buildPriceCells(r)}</div>
+      <div class="competitor-prices">${buildPriceCells(r, myRow)}</div>
     </div>`).join('');
 
   list.innerHTML = html;
