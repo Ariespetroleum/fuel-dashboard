@@ -327,6 +327,47 @@
     color: #fff;
   }
 
+  /* ── SECTION HEADER WITH RANGE PICKER ── */
+  .section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    margin-top: 28px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-header-row .section-label {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-top: 0;
+  }
+  .range-picker {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .range-chip {
+    padding: 5px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s ease;
+  }
+  .range-chip:hover { border-color: var(--border-strong); color: var(--label); }
+  .range-chip.active {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+
   /* ── COMPETITOR LIST ── */
   .competitor-list {
     display: flex;
@@ -454,7 +495,15 @@
     </div>
 
     <!-- 走势图 -->
-    <div class="section-label">价格走势</div>
+    <div class="section-header-row">
+      <div class="section-label" style="margin:0">价格走势</div>
+      <div class="range-picker" data-target="main">
+        <button class="range-chip active" data-range="7">7天</button>
+        <button class="range-chip" data-range="30">30天</button>
+        <button class="range-chip" data-range="182">半年</button>
+        <button class="range-chip" data-range="365">一年</button>
+      </div>
+    </div>
     <div class="charts">
       <div class="chart-card">
         <div class="chart-title">ULP 91</div>
@@ -480,7 +529,15 @@
     <div class="competitor-list" id="competitor-list"></div>
 
     <!-- 本店 vs 周边走势对比 -->
-    <div class="section-label" style="margin-top:24px">本店 vs 周边走势对比</div>
+    <div class="section-header-row" style="margin-top:24px">
+      <div class="section-label" style="margin:0">本店 vs 周边走势对比</div>
+      <div class="range-picker" data-target="store">
+        <button class="range-chip active" data-range="7">7天</button>
+        <button class="range-chip" data-range="30">30天</button>
+        <button class="range-chip" data-range="182">半年</button>
+        <button class="range-chip" data-range="365">一年</button>
+      </div>
+    </div>
     <div class="charts" id="store-trend-charts">
       <div class="chart-card">
         <div class="chart-title">U91 走势对比</div>
@@ -529,15 +586,18 @@ function cls(c, p) {
   return c > p ? 'up' : c < p ? 'down' : 'flat';
 }
 
-function makeChart(id, datasets) {
-  new Chart(document.getElementById(id), {
+const chartInstances = {}; // 记录所有 Chart 实例，方便切换时间范围时销毁重建
+
+function makeChart(id, labels, datasets) {
+  if (chartInstances[id]) chartInstances[id].destroy();
+  chartInstances[id] = new Chart(document.getElementById(id), {
     type: 'line',
-    data: { labels: window._labels, datasets },
+    data: { labels, datasets },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 14 } },
+        legend: { position: 'bottom', labels: { boxWidth: 10, padding: 14, font: { size: 10 } } },
         tooltip: {
           callbacks: {
             label: c => ' ' + c.dataset.label + ': ' + (c.parsed.y != null ? c.parsed.y.toFixed(2) + ' cpl' : '—')
@@ -552,17 +612,47 @@ function makeChart(id, datasets) {
   });
 }
 
-function ds(label, color, data) {
+function ds(label, color, data, dashed) {
   return {
     label, data,
     borderColor: color,
-    backgroundColor: color + '18',
-    borderWidth: 2,
-    pointRadius: data.length <= 10 ? 4 : 2,
+    backgroundColor: dashed ? 'transparent' : color + '18',
+    borderWidth: dashed ? 2 : 2,
+    borderDash: dashed ? [6,4] : undefined,
+    pointRadius: data.length <= 14 ? 4 : data.length <= 60 ? 2 : 0,
     pointHoverRadius: 6,
     tension: 0.35,
-    fill: true,
+    fill: !dashed,
   };
+}
+
+// 按"最近 N 天"截取数据（N=null 表示不限制，全部数据）
+function filterByDays(sortedRows, dateKey, days) {
+  if (!days) return sortedRows;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return sortedRows.filter(r => new Date(r[dateKey]) >= cutoff);
+}
+
+// ── 主图组（价格走势：ULP/Diesel/PULP/U98） ──
+function renderMainCharts(days) {
+  const rows = filterByDays(window._allRows, 'date', days);
+  const labels = rows.map(r => fmtDate(r.date));
+
+  makeChart('chartUlp', labels, [
+    ds('Viva ULP 91', '#E60012', rows.map(r => r.vivaMelbUlp||null)),
+    ds('AIP 均价',    '#003DA5', rows.map(r => r.aipUlp||null)),
+  ]);
+  makeChart('chartDiesel', labels, [
+    ds('Viva Diesel', '#E60012', rows.map(r => r.vivaDiesel||null)),
+    ds('AIP 均价',    '#003DA5', rows.map(r => r.aipDiesel||null)),
+  ]);
+  makeChart('chartPulp', labels, [
+    ds('Viva PULP 95','#00A651', rows.map(r => r.vivaMelbPulp||null)),
+  ]);
+  makeChart('chartU98', labels, [
+    ds('Viva U98',    '#6B21A8', rows.map(r => r.vivaMelbU98||null)),
+  ]);
 }
 
 async function load() {
@@ -574,6 +664,7 @@ async function load() {
     const rows = json.rows
       .filter(r => r.date)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
+    window._allRows = rows;
 
     const latest = rows[rows.length - 1];
     const prev   = rows.length > 1 ? rows[rows.length - 2] : null;
@@ -600,14 +691,8 @@ async function load() {
       </div>
     `).join('');
 
-    // Charts
-    window._labels = rows.map(r => fmtDate(r.date));
-    makeChart('chartUlp',    [ds('Viva ULP 91', '#E60012', rows.map(r => r.vivaMelbUlp||null)),
-                               ds('AIP 均价',    '#003DA5', rows.map(r => r.aipUlp||null))]);
-    makeChart('chartDiesel', [ds('Viva Diesel', '#E60012', rows.map(r => r.vivaDiesel||null)),
-                               ds('AIP 均价',    '#003DA5', rows.map(r => r.aipDiesel||null))]);
-    makeChart('chartPulp',   [ds('Viva PULP 95','#00A651', rows.map(r => r.vivaMelbPulp||null))]);
-    makeChart('chartU98',    [ds('Viva U98',    '#6B21A8', rows.map(r => r.vivaMelbU98||null))]);
+    // 主图组：默认显示最近7天
+    renderMainCharts(7);
 
     // Table
     const reversed = [...rows].reverse();
@@ -723,8 +808,21 @@ function renderCompetitorList(storeName) {
 // 每张图最多5条线：本店(红,加粗) + 最近3家竞品 + 周边均价(虚线)
 const TREND_COLORS = ['#003DA5', '#00A651', '#6B21A8']; // 3家竞品的颜色
 
-function renderStoreTrendCharts(storeName) {
-  const history = (window._servoHistory || []).filter(r => r.myStore === storeName);
+let currentStoreName = null;
+
+function renderStoreTrendCharts(storeName, days) {
+  currentStoreName = storeName;
+  if (days == null) days = window._storeRangeDays || 7;
+  window._storeRangeDays = days;
+
+  let history = (window._servoHistory || []).filter(r => r.myStore === storeName);
+
+  // 按天数筛选
+  if (days) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    history = history.filter(r => new Date(r.date) >= cutoff);
+  }
 
   if (!history.length) {
     ['chartStoreU91', 'chartStoreDsl'].forEach(id => {
@@ -831,6 +929,24 @@ function renderStoreTrendCharts(storeName) {
   storeU91Chart = renderOne('chartStoreU91', 'u91', storeU91Chart);
   storeDslChart = renderOne('chartStoreDsl', 'dsl', storeDslChart);
 }
+
+// ── 时间范围切换器：两组各自独立 ──
+document.querySelectorAll('.range-picker').forEach(picker => {
+  picker.querySelectorAll('.range-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      picker.querySelectorAll('.range-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const days = Number(chip.dataset.range);
+      const target = picker.dataset.target;
+
+      if (target === 'main') {
+        renderMainCharts(days);
+      } else if (target === 'store' && currentStoreName) {
+        renderStoreTrendCharts(currentStoreName, days);
+      }
+    });
+  });
+});
 
 load();
 </script>
