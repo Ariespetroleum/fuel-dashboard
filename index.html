@@ -479,6 +479,19 @@
     <div class="store-picker" id="store-picker"></div>
     <div class="competitor-list" id="competitor-list"></div>
 
+    <!-- 本店 vs 周边走势对比 -->
+    <div class="section-label" style="margin-top:24px">本店 vs 周边走势对比</div>
+    <div class="charts" id="store-trend-charts">
+      <div class="chart-card">
+        <div class="chart-title">U91 走势对比</div>
+        <canvas id="chartStoreU91"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">柴油走势对比</div>
+        <canvas id="chartStoreDsl"></canvas>
+      </div>
+    </div>
+
     <!-- 历史数据 -->
     <div class="section-label" style="margin-top:32px">历史数据</div>
     <div class="table-card">
@@ -617,6 +630,7 @@ async function load() {
     // ── Servo Saver 周边竞品 ──
     if (json.servo && json.servo.length) {
       window._servoData = json.servo;
+      window._servoHistory = json.servoHistory || [];
       renderStorePicker(json.servo);
     } else {
       document.getElementById('store-picker').innerHTML = '';
@@ -632,6 +646,7 @@ async function load() {
 
 // ── Servo Saver 周边竞品渲染 ──
 const FUEL_LABELS = { u91: 'U91', p95: '95', p98: '98', dsl: '柴油', e10: 'E10' };
+let storeU91Chart = null, storeDslChart = null;
 
 function renderStorePicker(servoRows) {
   const stores = [...new Set(servoRows.map(r => r.myStore))];
@@ -646,39 +661,175 @@ function renderStorePicker(servoRows) {
       picker.querySelectorAll('.store-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       renderCompetitorList(chip.dataset.store);
+      renderStoreTrendCharts(chip.dataset.store);
     });
   });
 
   renderCompetitorList(stores[0]);
+  renderStoreTrendCharts(stores[0]);
 }
 
 function renderCompetitorList(storeName) {
-  const rows = window._servoData.filter(r => r.myStore === storeName);
+  const allRows = window._servoData.filter(r => r.myStore === storeName);
   const list = document.getElementById('competitor-list');
 
-  if (!rows.length) {
+  if (!allRows.length) {
     list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">暂无数据</div>';
     return;
   }
 
-  list.innerHTML = rows.map((r, i) => {
-    const priceCells = ['u91','p95','p98','dsl','e10'].map(key => {
-      const val = r[key];
-      return `<div class="price-cell">
-        <div class="price-cell-label">${FUEL_LABELS[key]}</div>
-        <div class="price-cell-value ${val ? '' : 'empty'}">${val ? Number(val).toFixed(1) : '—'}</div>
-      </div>`;
-    }).join('');
+  // 把"本店"那一条（站名带 ⭐ 标记）单独分出来，置顶显示
+  const myRow   = allRows.find(r => r.stationName && r.stationName.indexOf('⭐') === 0);
+  const compRows = allRows.filter(r => r !== myRow);
 
-    return `<div class="competitor-row">
+  const buildPriceCells = (r) => ['u91','p95','p98','dsl','e10'].map(key => {
+    const val = r[key];
+    return `<div class="price-cell">
+      <div class="price-cell-label">${FUEL_LABELS[key]}</div>
+      <div class="price-cell-value ${val ? '' : 'empty'}">${val ? Number(val).toFixed(1) : '—'}</div>
+    </div>`;
+  }).join('');
+
+  let html = '';
+
+  if (myRow) {
+    html += `<div class="competitor-row is-mine">
+      <div class="competitor-rank">★</div>
+      <div class="competitor-info">
+        <div class="competitor-name">${myRow.stationName.replace('⭐ ', '')}</div>
+        <div class="competitor-meta">我的门店 · ${myRow.address}</div>
+      </div>
+      <div class="competitor-prices">${buildPriceCells(myRow)}</div>
+    </div>`;
+  } else {
+    html += `<div class="competitor-row" style="color:var(--muted);font-size:12px;">
+      ⚠️ 未在 Servo Saver 数据中找到本店记录（可能尚未上报或坐标偏差较大）
+    </div>`;
+  }
+
+  html += compRows.map((r, i) => `<div class="competitor-row">
       <div class="competitor-rank">${i + 1}</div>
       <div class="competitor-info">
         <div class="competitor-name">${r.stationName}</div>
         <div class="competitor-meta">${r.distanceKm} km · ${r.address}</div>
       </div>
-      <div class="competitor-prices">${priceCells}</div>
-    </div>`;
-  }).join('');
+      <div class="competitor-prices">${buildPriceCells(r)}</div>
+    </div>`).join('');
+
+  list.innerHTML = html;
+}
+
+// ── 本店 vs 周边 走势对比图 ──
+// 每张图最多5条线：本店(红,加粗) + 最近3家竞品 + 周边均价(虚线)
+const TREND_COLORS = ['#003DA5', '#00A651', '#6B21A8']; // 3家竞品的颜色
+
+function renderStoreTrendCharts(storeName) {
+  const history = (window._servoHistory || []).filter(r => r.myStore === storeName);
+
+  if (!history.length) {
+    ['chartStoreU91', 'chartStoreDsl'].forEach(id => {
+      const canvas = document.getElementById(id);
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+    return;
+  }
+
+  // 按日期分组
+  const dateSet = [...new Set(history.map(r => r.date))].sort();
+  const labels = dateSet.map(fmtDate);
+
+  // 本店：站名带 ⭐ 标记
+  const myRows = history.filter(r => r.stationName && r.stationName.indexOf('⭐') === 0);
+
+  // 竞品：找出在历史区间里出现次数最多的最多3个站名（保持线条连续，不要每天换不同家）
+  const compRowsAll = history.filter(r => !(r.stationName && r.stationName.indexOf('⭐') === 0));
+  const nameFreq = {};
+  compRowsAll.forEach(r => { nameFreq[r.stationName] = (nameFreq[r.stationName]||0) + 1; });
+  const topCompNames = Object.keys(nameFreq).sort((a,b) => nameFreq[b]-nameFreq[a]).slice(0, 3);
+
+  function seriesFor(rowsForName, fuelKey) {
+    return dateSet.map(d => {
+      const row = rowsForName.find(r => r.date === d);
+      return row && row[fuelKey] ? Number(row[fuelKey]) : null;
+    });
+  }
+
+  function buildDatasets(fuelKey) {
+    const datasets = [];
+
+    // 本店：红色加粗
+    datasets.push({
+      label: '本店',
+      data: seriesFor(myRows, fuelKey),
+      borderColor: '#E60012',
+      backgroundColor: 'transparent',
+      borderWidth: 3,
+      pointRadius: 4,
+      tension: 0.3,
+    });
+
+    // 最近3家竞品
+    topCompNames.forEach((name, i) => {
+      const rowsForName = compRowsAll.filter(r => r.stationName === name);
+      datasets.push({
+        label: name.length > 18 ? name.substring(0,18)+'…' : name,
+        data: seriesFor(rowsForName, fuelKey),
+        borderColor: TREND_COLORS[i],
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.3,
+      });
+    });
+
+    // 周边均价（虚线）：每天取该店当天所有竞品记录的均值
+    const avgSeries = dateSet.map(d => {
+      const dayRows = compRowsAll.filter(r => r.date === d && r[fuelKey]);
+      if (!dayRows.length) return null;
+      const sum = dayRows.reduce((s, r) => s + Number(r[fuelKey]), 0);
+      return sum / dayRows.length;
+    });
+    datasets.push({
+      label: '周边均价',
+      data: avgSeries,
+      borderColor: '#9CA3AF',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      tension: 0.3,
+    });
+
+    return datasets;
+  }
+
+  function renderOne(canvasId, fuelKey, existingChart) {
+    if (existingChart) existingChart.destroy();
+    return new Chart(document.getElementById(canvasId), {
+      type: 'line',
+      data: { labels, datasets: buildDatasets(fuelKey) },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 10 } } },
+          tooltip: {
+            callbacks: {
+              label: c => ' ' + c.dataset.label + ': ' + (c.parsed.y != null ? c.parsed.y.toFixed(1) + ' cpl' : '—')
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: '#DDE3EA' }, ticks: { maxRotation: 45 } },
+          y: { grid: { color: '#DDE3EA' }, ticks: { callback: v => v.toFixed(0) } }
+        }
+      }
+    });
+  }
+
+  storeU91Chart = renderOne('chartStoreU91', 'u91', storeU91Chart);
+  storeDslChart = renderOne('chartStoreDsl', 'dsl', storeDslChart);
 }
 
 load();
